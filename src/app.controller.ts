@@ -18,7 +18,6 @@ export class AppController {
 
   @Get('facebook/posts')
   getFacebookPosts(@Query() params: any): any {
-    console.log(`Params: ${JSON.stringify(params)}`);
     return getPosts(params.userId, params.hashtag);
   }
 

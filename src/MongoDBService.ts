@@ -1,13 +1,14 @@
 import { MongoClient, ServerApiVersion } from 'mongodb';
-
+import { GridFsStorage } from 'multer-gridfs-storage';
+import * as multer from 'multer';
 const username = encodeURIComponent('SocialArchive');
 const password = encodeURIComponent('M1ll10nD0llar1dea');
 const DB_NAME = 'Cluster0';
 const ROOT_COLLECTION = 'SocialArchive';
-const uri = `mongodb+srv://${username}:${password}@cluster0.pkkfyis.mongodb.net/?retryWrites=true&w=majority`;
+const MONGO_DB_URI = `mongodb+srv://${username}:${password}@cluster0.pkkfyis.mongodb.net/?retryWrites=true&w=majority`;
 
 export async function mongoDBInit() {
-  const client = new MongoClient(uri, {
+  const client = new MongoClient(MONGO_DB_URI, {
     serverApi: {
       version: ServerApiVersion.v1,
       strict: true,
@@ -45,21 +46,43 @@ export async function insertPosts(
 ) {
   // Key: {userId, post.id}, Value: { post, ...hashtag }
 
+  // Create a storage object with a given configuration
+  const url = `${MONGO_DB_URI}/${DB_NAME}`;
+  const storage = new GridFsStorage({
+    url,
+    file: (req, file) => {
+      if (file.mimetype === 'image/jpeg') {
+        return {
+          bucketName: 'photos',
+        };
+      } else {
+        return 'default-photos';
+      }
+    },
+  });
+  // Set multer storage engine to the newly created object
+  const upload = multer({ storage });
+
+  // console.log(
+  //   `\n****\n****DEBUG: inserting posts:\n\n${JSON.stringify(posts)}`,
+  // );
   const mongoDocs = [];
   posts.forEach((post) => {
     mongoDocs.push({ _id: post.id, userId, hashtag, ...post });
+    if (post.attachments) {
+      console.log(`image link=${JSON.stringify(post.attachments)}`);
+      upload.single(post.attachments.data[0].media.image.src);
+    }
   });
 
-  const client = new MongoClient(uri, {
+  const client = new MongoClient(MONGO_DB_URI, {
     serverApi: {
       version: ServerApiVersion.v1,
       strict: true,
       deprecationErrors: true,
     },
   });
-
   try {
-    // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
     let count = 0;
     for (const doc of mongoDocs) {
@@ -81,7 +104,7 @@ export async function insertPosts(
 }
 
 export async function getPosts(userId: string, hashtag: string) {
-  const client = new MongoClient(uri, {
+  const client = new MongoClient(MONGO_DB_URI, {
     serverApi: {
       version: ServerApiVersion.v1,
       strict: true,
