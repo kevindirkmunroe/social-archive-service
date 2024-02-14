@@ -1,10 +1,12 @@
 import { MongoClient, ServerApiVersion } from 'mongodb';
-import { GridFsStorage } from 'multer-gridfs-storage';
-import * as multer from 'multer';
+// import { GridFsStorage } from 'multer-gridfs-storage';
+// import * as multer from 'multer';
+import { uploadMediaToS3 } from './AWSService';
 const username = encodeURIComponent('SocialArchive');
 const password = encodeURIComponent('M1ll10nD0llar1dea');
 const DB_NAME = 'Cluster0';
 const ROOT_COLLECTION = 'SocialArchive';
+const MEDIA_COLLECTION = 'SocialArchiveMedia';
 const MONGO_DB_URI = `mongodb+srv://${username}:${password}@cluster0.pkkfyis.mongodb.net/?retryWrites=true&w=majority`;
 
 export async function mongoDBInit() {
@@ -16,27 +18,27 @@ export async function mongoDBInit() {
     },
   });
 
-  try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
-    await client.db(DB_NAME).createCollection(ROOT_COLLECTION);
-    console.log(
-      `\n[SocialArchive] MongoDB collection ${ROOT_COLLECTION} ready.\n`,
-    );
-  } catch (error) {
-    if (!(error.codeName === 'NamespaceExists')) {
-      console.log(
-        `[SocialArchive] MongoDB init ERROR: ${JSON.stringify(error)}`,
-      );
-    } else {
-      console.log(
-        `\n[SocialArchive] MongoDB collection ${ROOT_COLLECTION} ready.\n`,
-      );
+  const mongoCollections = [ROOT_COLLECTION, MEDIA_COLLECTION];
+  for (const collection of mongoCollections) {
+    try {
+      // Connect the client to the server	(optional starting in v4.7)
+      await client.connect();
+      await client.db(DB_NAME).createCollection(collection);
+      console.log(`[SocialArchive] MongoDB collection ${collection} ready.`);
+    } catch (error) {
+      if (!(error.codeName === 'NamespaceExists')) {
+        console.log(
+          `[SocialArchive] MongoDB init ERROR: ${JSON.stringify(error)}`,
+        );
+      } else {
+        console.log(
+          `\n[SocialArchive] MongoDB collection ${collection} ready.`,
+        );
+      }
     }
-  } finally {
-    // Ensures that the client will close when you finish/error
-    await client.close();
   }
+  // Ensures that the client will close when you finish/error
+  await client.close();
 }
 
 export async function insertPosts(
@@ -46,35 +48,9 @@ export async function insertPosts(
 ) {
   // Key: {userId, post.id}, Value: { post, ...hashtag }
 
-  // Create a storage object with a given configuration
-  const url = `${MONGO_DB_URI}/${DB_NAME}`;
-  const storage = new GridFsStorage({
-    url,
-    file: (req, file) => {
-      if (file.mimetype === 'image/jpeg') {
-        return {
-          bucketName: 'photos',
-        };
-      } else {
-        return 'default-photos';
-      }
-    },
-  });
-  // Set multer storage engine to the newly created object
-  const upload = multer({ storage });
-
-  // console.log(
-  //   `\n****\n****DEBUG: inserting posts:\n\n${JSON.stringify(posts)}`,
-  // );
-  const mongoDocs = [];
-  posts.forEach((post) => {
-    mongoDocs.push({ _id: post.id, userId, hashtag, ...post });
-    if (post.attachments) {
-      console.log(`image link=${JSON.stringify(post.attachments)}`);
-      upload.single(post.attachments.data[0].media.image.src);
-    }
-  });
-
+  //
+  // Initialize Mongo Client
+  //
   const client = new MongoClient(MONGO_DB_URI, {
     serverApi: {
       version: ServerApiVersion.v1,
@@ -84,12 +60,59 @@ export async function insertPosts(
   });
   try {
     await client.connect();
+  } catch (error) {
+    console.log(`[MongoDBService] ERROR ${JSON.stringify(error)}`);
+  }
+  // Initialize Media uploader
+  // const database = client.db(DB_NAME);
+  // const storage = new GridFsStorage({
+  //   db: database,
+  //   file: (req, file) => {
+  //     return {
+  //       bucketName: MEDIA_COLLECTION,
+  //       filename: `media_${file}_${Date.now()}`,
+  //     };
+  //   },
+  // });
+  // const upload = multer({ storage });
+
+  //
+  // Build up docs to insert
+  //
+  const mongoDocs = [];
+  posts.forEach((post) => {
+    mongoDocs.push({ _id: post.id, userId, hashtag, ...post });
+    if (post.attachments) {
+      console.log(`image link=${JSON.stringify(post.attachments)}`);
+    }
+  });
+  try {
     let count = 0;
     for (const doc of mongoDocs) {
+      //
+      // Upsert post
+      //
       await client
         .db(DB_NAME)
         .collection(ROOT_COLLECTION)
         .replaceOne({ _id: doc._id }, doc, { upsert: true });
+
+      //
+      // Archive image bytes
+      //
+      if (doc.attachments) {
+        console.log(
+          `ATTACHMENT FOUND for ${doc.id}: ${doc.attachments.data[0].media.image.src}`,
+        );
+        // const result = await upload.single(
+        //   doc.attachments.data[0].media.image.src,
+        // );
+        await uploadMediaToS3(
+          doc._id,
+          doc.attachments.data[0].media.image.src,
+          'facebook',
+        );
+      }
       count++;
     }
     console.log(`\n[SocialArchive] Upserted ${count} posts.\n`);
