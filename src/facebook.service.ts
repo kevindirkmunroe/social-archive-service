@@ -35,7 +35,6 @@ export class FacebookService {
           },
         })
         .then((response) => {
-          // console.log(`\n\nAXIOS response=${JSON.stringify(response.data)}`);
           WTF = response.data;
           return response.data; //extract JSON from the http response
         });
@@ -48,7 +47,6 @@ export class FacebookService {
     while (next !== null && !atOldestPost) {
       console.log(`\nInsertFacebookPosts NEXT URL=${next}`);
       let posts = await getPostsFromFacebookAction(next);
-      // console.log(`\nAYYYYY got response ${JSON.stringify(WTF)}`);
       posts = WTF;
 
       if (posts && posts.data) {

@@ -1,12 +1,9 @@
 import { MongoClient, ServerApiVersion } from 'mongodb';
-// import { GridFsStorage } from 'multer-gridfs-storage';
-// import * as multer from 'multer';
 import { uploadMediaToS3 } from './AWSService';
 const username = encodeURIComponent('SocialArchive');
 const password = encodeURIComponent('M1ll10nD0llar1dea');
 const DB_NAME = 'Cluster0';
 const ROOT_COLLECTION = 'SocialArchive';
-const MEDIA_COLLECTION = 'SocialArchiveMedia';
 const MONGO_DB_URI = `mongodb+srv://${username}:${password}@cluster0.pkkfyis.mongodb.net/?retryWrites=true&w=majority`;
 
 export async function mongoDBInit() {
@@ -18,7 +15,7 @@ export async function mongoDBInit() {
     },
   });
 
-  const mongoCollections = [ROOT_COLLECTION, MEDIA_COLLECTION];
+  const mongoCollections = [ROOT_COLLECTION];
   for (const collection of mongoCollections) {
     try {
       // Connect the client to the server	(optional starting in v4.7)
@@ -63,18 +60,6 @@ export async function insertPosts(
   } catch (error) {
     console.log(`[MongoDBService] ERROR ${JSON.stringify(error)}`);
   }
-  // Initialize Media uploader
-  // const database = client.db(DB_NAME);
-  // const storage = new GridFsStorage({
-  //   db: database,
-  //   file: (req, file) => {
-  //     return {
-  //       bucketName: MEDIA_COLLECTION,
-  //       filename: `media_${file}_${Date.now()}`,
-  //     };
-  //   },
-  // });
-  // const upload = multer({ storage });
 
   //
   // Build up docs to insert
@@ -104,13 +89,11 @@ export async function insertPosts(
         console.log(
           `ATTACHMENT FOUND for ${doc.id}: ${doc.attachments.data[0].media.image.src}`,
         );
-        // const result = await upload.single(
-        //   doc.attachments.data[0].media.image.src,
-        // );
+        await uploadMediaToS3(doc._id, doc.attachments.data[0].media.image.src);
+      } else {
         await uploadMediaToS3(
           doc._id,
-          doc.attachments.data[0].media.image.src,
-          'facebook',
+          `https://bronze-giant-social-archive.s3.us-west-1.amazonaws.com/default/facebook-3-128.jpg`,
         );
       }
       count++;

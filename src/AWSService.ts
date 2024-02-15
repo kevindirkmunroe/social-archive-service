@@ -18,37 +18,39 @@ const s3Client = new S3Client({
 });
 const MEDIA_BUCKET = 'bronze-giant-social-archive';
 
-export const uploadMediaToS3 = async (
-  mediaName,
-  mediaUrl,
-  socialMediaSource,
-) => {
+export const uploadMediaToS3 = async (mediaName, mediaUrl) => {
   const stream = new PassThrough();
-  const bucketName = `s3://${MEDIA_BUCKET}/${socialMediaSource}`;
+  const bucketName = `${MEDIA_BUCKET}`;
+  const contentType = 'image/jpeg';
   const upload = new Upload({
     client: s3Client,
     params: {
       Bucket: bucketName,
-      Key: mediaName,
+      Key: `${mediaName}.jpg`,
       Body: stream,
+      ContentType: contentType,
     },
   });
 
-  console.log(`\nS3 bucket: ${bucketName}`);
-
   let data = null;
-  await axios.get(mediaUrl).then((response) => {
-    data = response.data;
-  });
+  await axios
+    .get(mediaUrl, {
+      responseType: 'arraybuffer',
+    })
+    .then((response) => {
+      data = response.data;
+    });
   try {
     stream.write(data, (error) => {
-      console.log(`S3 Stream Write ERROR: ${error}`);
+      if (error) {
+        console.log(`S3 Stream Write ERROR (1): ${error}`);
+      }
     });
   } catch (error) {
-    console.log(`S3 ERROR: ${error}`);
+    console.log(`S3 Stream Write ERROR (2): ${error}`);
+  } finally {
+    stream.end();
+    await upload.done();
+    console.log(`\n[SocialArchive] AWS S3 Upload complete: ${mediaUrl}`);
   }
-
-  stream.end();
-  await upload.done();
-  console.log(`[SocialArchive] ${mediaUrl} AWS S3 Upload complete`);
 };

@@ -31,7 +31,6 @@
     "class-validator": "^0.14.0",
     "got": "^14.2.0",
     "mongodb": "^6.3.0",
-    "multer-gridfs-storage": "^5.0.2",
     "node-fetch": "^3.3.2",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.1"
