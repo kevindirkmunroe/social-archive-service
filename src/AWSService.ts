@@ -4,8 +4,8 @@ import { S3Client } from '@aws-sdk/client-s3';
 import axios from 'axios';
 
 const S3_URL = `s3.us-west-1.amazonaws.com`;
-const S3_ACCESS_KEY = `AKIA6ODU6YSMY2643QXQ`;
-const S3_SECRET_KEY = `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`;
+const S3_ACCESS_KEY = `AKIA6ODU6YSMYPVZCHWO`;
+const S3_SECRET_KEY = `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`;
 const S3_REGION = `us-west-1`;
 
 const s3Client = new S3Client({

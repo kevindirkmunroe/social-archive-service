@@ -86,14 +86,13 @@ export async function insertPosts(
       // Archive image bytes
       //
       if (doc.attachments) {
-        console.log(
-          `ATTACHMENT FOUND for ${doc.id}: ${doc.attachments.data[0].media.image.src}`,
-        );
-        await uploadMediaToS3(doc._id, doc.attachments.data[0].media.image.src);
+        for (const media of doc.attachments.data) {
+          await uploadMediaToS3(doc._id, media.image.src);
+        }
       } else {
         await uploadMediaToS3(
           doc._id,
-          `https://bronze-giant-social-archive.s3.us-west-1.amazonaws.com/default/facebook-3-128.jpg`,
+          `https://bronze-giant-social-archive.s3.us-west-1.amazonaws.com/default/facebook-3-b 128.jpg`,
         );
       }
       count++;
