@@ -136,3 +136,36 @@ export async function getPosts(userId: string, hashtag: string) {
     await client.close();
   }
 }
+
+export async function getHashtags() {
+  const client = new MongoClient(MONGO_DB_URI, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: false,
+      deprecationErrors: true,
+    },
+  });
+
+  try {
+    // Connect the client to the server	(optional starting in v4.7)
+    await client.connect();
+    const results = await client
+      .db(DB_NAME)
+      .collection(ROOT_COLLECTION)
+      .distinct('hashtag');
+
+    console.log(
+      `\n[SocialArchive] Got ${results.length} hashtags: ${JSON.stringify(
+        results,
+      )}.\n`,
+    );
+    return results;
+  } catch (error) {
+    console.log(
+      `[SocialArchive] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
+    );
+  } finally {
+    // Ensures that the client will close when you finish/error
+    await client.close();
+  }
+}
