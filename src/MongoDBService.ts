@@ -120,7 +120,11 @@ export async function getPosts(userId: string, hashtag: string) {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-    const query = { userId: userId, hashtag: hashtag };
+    const query =
+      userId !== null
+        ? { userId: userId, hashtag: hashtag }
+        : { hashtag: hashtag };
+    console.log(`[SocialArchive] query=${JSON.stringify(query)}`);
     const results = await client
       .db(DB_NAME)
       .collection(ROOT_COLLECTION)
