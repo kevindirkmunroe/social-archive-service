@@ -90,7 +90,13 @@ export async function insertPosts(
       //
       if (doc.attachments) {
         for (const media of doc.attachments.data) {
-          await uploadMediaToS3(doc._id, media.image.src);
+          try {
+            await uploadMediaToS3(doc._id, media.image.src);
+          } catch (error) {
+            console.log(
+              `[SocialArchive] S3 insert ERROR: ${JSON.stringify(error)}`,
+            );
+          }
         }
       } else {
         await uploadMediaToS3(doc._id, S3_DEFAULT_IMAGE);
