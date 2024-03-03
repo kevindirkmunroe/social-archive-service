@@ -1,10 +1,13 @@
+import 'dotenv/config.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
 import { uploadMediaToS3 } from './AWSService';
-const username = encodeURIComponent('SocialArchive');
-const password = encodeURIComponent('M1ll10nD0llar1dea');
-const DB_NAME = 'Cluster0';
-const ROOT_COLLECTION = 'SocialArchive';
+
+const username = encodeURIComponent(process.env.MONGODB_USERNAME);
+const password = encodeURIComponent(process.env.MONGODB_PASSWORD);
+const DB_NAME = process.env.MONGODB_DB_NAME;
+const ROOT_COLLECTION = process.env.MONGODB_ROOT_COLLECTION;
 const MONGO_DB_URI = `mongodb+srv://${username}:${password}@cluster0.pkkfyis.mongodb.net/?retryWrites=true&w=majority`;
+const S3_DEFAULT_IMAGE = process.env.S3_DEFAULT_IMAGE;
 
 export async function mongoDBInit() {
   const client = new MongoClient(MONGO_DB_URI, {
@@ -90,10 +93,7 @@ export async function insertPosts(
           await uploadMediaToS3(doc._id, media.image.src);
         }
       } else {
-        await uploadMediaToS3(
-          doc._id,
-          `https://bronze-giant-social-archive.s3.us-west-1.amazonaws.com/default/facebook-3-b 128.jpg`,
-        );
+        await uploadMediaToS3(doc._id, S3_DEFAULT_IMAGE);
       }
       count++;
     }

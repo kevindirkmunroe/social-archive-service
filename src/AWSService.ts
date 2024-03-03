@@ -1,12 +1,13 @@
+import 'dotenv/config.js';
 import { Upload } from '@aws-sdk/lib-storage';
 import { PassThrough } from 'stream';
 import { S3Client } from '@aws-sdk/client-s3';
 import axios from 'axios';
 
-const S3_URL = `s3.us-west-1.amazonaws.com`;
-const S3_ACCESS_KEY = `AKIA6ODU6YSMYPVZCHWO`;
-const S3_SECRET_KEY = `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`;
-const S3_REGION = `us-west-1`;
+const S3_URL = process.env.S3_URL;
+const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY;
+const S3_SECRET_KEY = process.env.S3_SECRET_KEY;
+const S3_REGION = process.env.S3_REGION;
 
 const s3Client = new S3Client({
   endpoint: `https://${S3_URL}`,
@@ -16,7 +17,7 @@ const s3Client = new S3Client({
   },
   region: S3_REGION,
 });
-const MEDIA_BUCKET = 'bronze-giant-social-archive';
+const MEDIA_BUCKET = process.env.S3_MEDIA_BUCKET;
 
 export const uploadMediaToS3 = async (mediaName, mediaUrl) => {
   const stream = new PassThrough();
