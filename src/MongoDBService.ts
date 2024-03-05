@@ -1,6 +1,6 @@
 import 'dotenv/config.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
-import { uploadMediaToS3 } from './AWSService';
+import { uploadMediaToS3, deleteMediaFromS3 } from './AWSService';
 
 const username = encodeURIComponent(process.env.MONGODB_USERNAME);
 const password = encodeURIComponent(process.env.MONGODB_PASSWORD);
@@ -41,13 +41,7 @@ export async function mongoDBInit() {
   await client.close();
 }
 
-export async function insertPosts(
-  userId: string,
-  hashtag: string,
-  posts: any[],
-) {
-  // Key: {userId, post.id}, Value: { post, ...hashtag }
-
+const openMongoDBClient = async () => {
   //
   // Initialize Mongo Client
   //
@@ -63,7 +57,17 @@ export async function insertPosts(
   } catch (error) {
     console.log(`[MongoDBService] ERROR ${JSON.stringify(error)}`);
   }
+  return client;
+};
 
+export async function insertPosts(
+  userId: string,
+  hashtag: string,
+  posts: any[],
+) {
+  // Key: {userId, post.id}, Value: { post, ...hashtag }
+
+  const client = await openMongoDBClient();
   //
   // Build up docs to insert
   //
@@ -89,15 +93,11 @@ export async function insertPosts(
       // Archive image bytes
       //
       if (doc.attachments) {
-        for (const media of doc.attachments.data) {
-          try {
-            await uploadMediaToS3(doc._id, media.image.src);
-          } catch (error) {
-            console.log(
-              `[SocialArchive] S3 insert ERROR: ${JSON.stringify(error)}`,
-            );
-          }
-        }
+        const attachmentData = doc.attachments.data;
+        attachmentData.map(async (media) => {
+          const { media: media2 } = media;
+          await uploadMediaToS3(doc._id, media2.image.src);
+        });
       } else {
         await uploadMediaToS3(doc._id, S3_DEFAULT_IMAGE);
       }
@@ -115,17 +115,10 @@ export async function insertPosts(
 }
 
 export async function getPosts(userId: string, hashtag: string) {
-  const client = new MongoClient(MONGO_DB_URI, {
-    serverApi: {
-      version: ServerApiVersion.v1,
-      strict: true,
-      deprecationErrors: true,
-    },
-  });
-
+  let client = null;
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    client = await openMongoDBClient();
     const query =
       userId !== null
         ? { userId: userId, hashtag: hashtag }
@@ -143,7 +136,9 @@ export async function getPosts(userId: string, hashtag: string) {
     console.log(`[SocialArchive] MongoDB get ERROR: ${JSON.stringify(error)}`);
   } finally {
     // Ensures that the client will close when you finish/error
-    await client.close();
+    if (client) {
+      await client.close();
+    }
   }
 }
 
@@ -175,6 +170,74 @@ export async function getHashtags() {
       `[SocialArchive] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
     );
   } finally {
+    // Ensures that the client will close when you finish/error
+    await client.close();
+  }
+}
+
+export async function deleteHashtag(userId: string, hashtag: string) {
+  //
+  // Initialize Mongo Client
+  //
+  let client = null;
+  try {
+    client = await openMongoDBClient();
+  } catch (error) {
+    console.log(
+      `[MongoDBService] ERROR opening MongoDB client: ${JSON.stringify(error)}`,
+    );
+    return;
+  }
+
+  const session = client.startSession();
+  const imagesToDelete = [];
+
+  try {
+    await session.withTransaction(async () => {
+      //
+      // Delete from MongoDB
+      //
+      try {
+        await client
+          .db(DB_NAME)
+          .collection(ROOT_COLLECTION)
+          .deleteMany({ hashtag: hashtag }, { session: session });
+      } catch (err) {
+        throw err;
+      }
+
+      //
+      // Delete from S3
+      //
+
+      // TODO: find a way to get the image ids without fetching posts first
+      try {
+        const posts = await getPosts(userId, hashtag);
+        posts.forEach((post) => {
+          imagesToDelete.push(`${post.id}.jpg`);
+        });
+      } catch (err) {
+        throw err;
+      }
+
+      try {
+        await deleteMediaFromS3(imagesToDelete);
+        console.log(
+          `\n[SocialArchive] Deleted ${imagesToDelete.length} posts.\n`,
+        );
+      } catch (err) {
+        throw err;
+      }
+    });
+    return imagesToDelete.length;
+  } catch (error) {
+    console.log(
+      `[SocialArchive] Error deleting hashtag ${hashtag}: ${JSON.stringify(
+        error,
+      )}`,
+    );
+  } finally {
+    await session.endSession();
     // Ensures that the client will close when you finish/error
     await client.close();
   }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import IFacebookPayload from './IFacebookPayload';
-import { insertPosts } from './MongoDBService';
+import { deleteHashtag, insertPosts } from './MongoDBService';
 import axios from 'axios';
 
 @Injectable()
@@ -23,6 +23,16 @@ export class FacebookService {
     });
 
     return { filteredPosts, oldestDate };
+  }
+
+  async deleteFacebookPosts(fbPayload: IFacebookPayload): Promise<number> {
+    try {
+      return await deleteHashtag(fbPayload.id, fbPayload.hashtag);
+    } catch (error) {
+      console.log(
+        `[SocialArchive] facebookService error deleting hashtag ${fbPayload.hashtag}: ${error}`,
+      );
+    }
   }
 
   async insertFacebookPosts(fbPayload: IFacebookPayload): Promise<number> {

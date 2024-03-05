@@ -11,11 +11,6 @@ export class AppController {
     private readonly facebookService: FacebookService,
   ) {}
 
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
-  }
-
   @Get('facebook/posts')
   getFacebookPosts(@Query() params: any): any {
     return getPosts(params.userId, params.hashtag);
@@ -29,5 +24,10 @@ export class AppController {
   @Post()
   async putFacebookData(@Body() fbPayload: FacebookPayloadDto) {
     return this.facebookService.insertFacebookPosts(fbPayload);
+  }
+
+  @Post('facebook/delete')
+  async deleteFacebookData(@Body() fbPayload: FacebookPayloadDto) {
+    return this.facebookService.deleteFacebookPosts(fbPayload);
   }
 }
