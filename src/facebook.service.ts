@@ -7,7 +7,7 @@ import axios from 'axios';
 export class FacebookService {
   static VERSION = 'v18.0';
 
-  getPostsByHashtag(data: any[], hashtag: string) {
+  filterPostsByHashtag(data: any[], hashtag: string) {
     let oldestDate = null;
     const filteredPosts = [];
     data.forEach((post) => {
@@ -37,7 +37,7 @@ export class FacebookService {
 
   async insertFacebookPosts(fbPayload: IFacebookPayload): Promise<number> {
     let WTF = { name: 'WTF' };
-    const getPostsFromFacebookAction = async (nextUrl): Promise<any> => {
+    const getGraphAPIDataFromFacebook = async (nextUrl): Promise<any> => {
       await axios
         .get(nextUrl, {
           headers: {
@@ -50,23 +50,41 @@ export class FacebookService {
         });
     };
 
-    let next = `https://graph.facebook.com/${FacebookService.VERSION}/${fbPayload.id}/posts?fields=id,created_time,message,attachments{media}`;
+    const addAttachmentsToPost = async (post) => {
+      const postUrl = `https://graph.facebook.com/${FacebookService.VERSION}/${post.id}/attachments`;
+      await axios
+        .get(postUrl, {
+          headers: {
+            Authorization: `Bearer ${fbPayload.accessToken}`,
+          },
+        })
+        .then((response) => {
+          post['attachments'] = response.data.data;
+        });
+    };
+
+    let next = `https://graph.facebook.com/${FacebookService.VERSION}/${fbPayload.id}/posts?fields=id,created_time,message`;
     let result = [];
     let atOldestPost = false;
     let totalCount = 0;
     while (next !== null && !atOldestPost) {
       console.log(`\nInsertFacebookPosts NEXT URL=${next}`);
-      let posts = await getPostsFromFacebookAction(next);
+      let posts = await getGraphAPIDataFromFacebook(next);
       posts = WTF;
 
       if (posts && posts.data) {
         console.log(`${posts.data.length} raw posts`);
         totalCount += posts.data.length;
-        const { filteredPosts, oldestDate } = this.getPostsByHashtag(
+        const { filteredPosts, oldestDate } = this.filterPostsByHashtag(
           posts.data,
           fbPayload.hashtag,
         );
         console.log(`\n\ngot ${filteredPosts.length} filtered posts`);
+
+        filteredPosts.forEach((post) => {
+          addAttachmentsToPost(post);
+        });
+
         result = result.concat(filteredPosts);
         console.log(`result length now ${result.length}`);
         console.log(

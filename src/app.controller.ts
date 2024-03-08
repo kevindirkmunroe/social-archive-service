@@ -21,7 +21,7 @@ export class AppController {
     return getHashtags();
   }
 
-  @Post()
+  @Post('save')
   async putFacebookData(@Body() fbPayload: FacebookPayloadDto) {
     return this.facebookService.insertFacebookPosts(fbPayload);
   }
