@@ -1,7 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import IFacebookPayload from './IFacebookPayload';
-import { deleteHashtag, insertPosts } from './MongoDBService';
+import {
+  deleteHashtag,
+  insertPosts,
+  insertSharedHashtag,
+  getShareableHashtagId,
+  getShareableHashtagDetails,
+} from './MongoDBService';
 import axios from 'axios';
+import { SharedHashtagDto } from './SharedHashtag.dto';
+import IFacebookInsertResult from './IFacebookInsertResult';
 
 @Injectable()
 export class FacebookService {
@@ -35,7 +43,9 @@ export class FacebookService {
     }
   }
 
-  async insertFacebookPosts(fbPayload: IFacebookPayload): Promise<number> {
+  async insertFacebookPosts(
+    fbPayload: IFacebookPayload,
+  ): Promise<IFacebookInsertResult> {
     let WTF = { name: 'WTF' };
     const getGraphAPIDataFromFacebook = async (nextUrl): Promise<any> => {
       await axios
@@ -105,6 +115,33 @@ export class FacebookService {
     console.log(
       `[SocialArchive] Archived ${result.length} out of ${totalCount} posts.`,
     );
-    return result.length;
+
+    const sharedHashtag: SharedHashtagDto = {
+      userName: fbPayload.userName,
+      userId: fbPayload.id,
+      hashtag: fbPayload.hashtag,
+    };
+
+    const shareKey = await this.createSharedHashtag(sharedHashtag);
+    return {
+      count: result.length,
+      shareKey: shareKey.toString(),
+    };
+  }
+
+  async createSharedHashtag(sharedHashtag: SharedHashtagDto) {
+    const key =
+      Math.floor(Math.random() * (9999999999 - 1000000000 + 1)) + 1000000000;
+    await insertSharedHashtag({ id: key, sharedHashtag });
+    console.log(`[SocialArchive] created shared hashtag ${key}`);
+    return key;
+  }
+
+  async getShareableHashtagId(userId, hashtag) {
+    return await getShareableHashtagId(userId, hashtag);
+  }
+
+  async getShareableHashtagDetails(shareableHashtagId) {
+    return await getShareableHashtagDetails(shareableHashtagId);
   }
 }

@@ -30,6 +30,7 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.0",
     "dotenv": "^16.4.5",
+    "getmac": "^6.6.0",
     "got": "^14.2.0",
     "mongodb": "^6.3.0",
     "node-fetch": "^3.3.2",

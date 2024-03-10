@@ -1,11 +1,12 @@
 import 'dotenv/config.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
-import { uploadMediaToS3, deleteMediaFromS3 } from './AWSService';
+import { deleteMediaFromS3, uploadMediaToS3 } from './AWSService';
 
 const username = encodeURIComponent(process.env.MONGODB_USERNAME);
 const password = encodeURIComponent(process.env.MONGODB_PASSWORD);
 const DB_NAME = process.env.MONGODB_DB_NAME;
 const ROOT_COLLECTION = process.env.MONGODB_ROOT_COLLECTION;
+const SHARED_HASHTAG_COLLECTION = process.env.MONGODB_SHARED_HASHTAG_COLLECTION;
 const MONGO_DB_URI = `mongodb+srv://${username}:${password}@cluster0.pkkfyis.mongodb.net/?retryWrites=true&w=majority`;
 const S3_DEFAULT_IMAGE = process.env.S3_DEFAULT_IMAGE;
 
@@ -123,7 +124,7 @@ export async function getPosts(userId: string, hashtag: string) {
       userId !== null
         ? { userId: userId, hashtag: hashtag }
         : { hashtag: hashtag };
-    console.log(`[SocialArchive] query=${JSON.stringify(query)}`);
+    console.log(`[SocialArchive] getPosts query=${JSON.stringify(query)}`);
     const results = await client
       .db(DB_NAME)
       .collection(ROOT_COLLECTION)
@@ -151,6 +152,9 @@ export async function getHashtags() {
     },
   });
 
+  //
+  // TODO: now that there's SocialArhiveShares, this query is obsolete
+  //
   try {
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
@@ -164,7 +168,9 @@ export async function getHashtags() {
         results,
       )}.\n`,
     );
-    return results;
+    return results.map((result) => {
+      return { shareableId: 1130463377, hashtag: result };
+    });
   } catch (error) {
     console.log(
       `[SocialArchive] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
@@ -238,6 +244,84 @@ export async function deleteHashtag(userId: string, hashtag: string) {
     );
   } finally {
     await session.endSession();
+    // Ensures that the client will close when you finish/error
+    await client.close();
+  }
+}
+
+export async function insertSharedHashtag(sharedHashtag) {
+  let client;
+  try {
+    client = await openMongoDBClient();
+    await client
+      .db(DB_NAME)
+      .collection(SHARED_HASHTAG_COLLECTION)
+      .replaceOne({ _id: sharedHashtag.id }, sharedHashtag, { upsert: true });
+
+    console.log(
+      `[SocialArchive] upsert shared hashtag ${sharedHashtag.id} COMPLETE`,
+    );
+  } catch (error) {
+    console.log(
+      `[SocialArchive] insert shared hashtag ERROR: ${JSON.stringify(error)}`,
+    );
+  } finally {
+    if (client) {
+      client.close();
+    }
+  }
+}
+
+export async function getShareableHashtagId(userId, hashtag) {
+  let client;
+  try {
+    client = await openMongoDBClient();
+    // Connect the client to the server	(optional starting in v4.7)
+    await client.connect();
+    const results = await client
+      .db(DB_NAME)
+      .collection(SHARED_HASHTAG_COLLECTION)
+      .find({ userId, hashtag });
+
+    console.log(
+      `\n[SocialArchive] Got ${
+        results.length
+      } shareable hashtags: ${JSON.stringify(results)})}.\n`,
+    );
+    return results;
+  } catch (error) {
+    console.log(
+      `[SocialArchive] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
+    );
+  } finally {
+    // Ensures that the client will close when you finish/error
+    await client.close();
+  }
+}
+
+export async function getShareableHashtagDetails(shareableHashtagId) {
+  let client;
+  try {
+    client = await openMongoDBClient();
+    // Connect the client to the server	(optional starting in v4.7)
+    await client.connect();
+    const query = { _id: 1130463377 };
+    const results = await client
+      .db(DB_NAME)
+      .collection(SHARED_HASHTAG_COLLECTION)
+      .find(query);
+
+    console.log(
+      `\n[SocialArchive] getShareableHashtagDetails for ${shareableHashtagId} Got ${
+        results.length
+      } shareable hashtags: ${JSON.stringify(results)})}.\n`,
+    );
+    return results;
+  } catch (error) {
+    console.log(
+      `[SocialArchive] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
+    );
+  } finally {
     // Ensures that the client will close when you finish/error
     await client.close();
   }

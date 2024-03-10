@@ -30,4 +30,22 @@ export class AppController {
   async deleteFacebookData(@Body() fbPayload: FacebookPayloadDto) {
     return this.facebookService.deleteFacebookPosts(fbPayload);
   }
+
+  @Get('facebook/shareable-hashtag')
+  async getShareableHashtagId(@Query() params: any): Promise<string> {
+    return this.facebookService.getShareableHashtagId(
+      params.userId,
+      params.hashtag,
+    );
+  }
+
+  @Get('facebook/shareable-hashtag-details')
+  async getShareableHashtagDetails(@Query() params: any): Promise<string> {
+    return this.facebookService.getShareableHashtagDetails(params.id);
+  }
+
+  @Get()
+  getHello(): string {
+    return this.appService.getHello();
+  }
 }
