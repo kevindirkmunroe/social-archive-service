@@ -143,7 +143,7 @@ export async function getPosts(userId: string, hashtag: string) {
   }
 }
 
-export async function getHashtags() {
+export async function getHashtags(userId) {
   const client = new MongoClient(MONGO_DB_URI, {
     serverApi: {
       version: ServerApiVersion.v1,
@@ -160,8 +160,9 @@ export async function getHashtags() {
     await client.connect();
     const results = await client
       .db(DB_NAME)
-      .collection(ROOT_COLLECTION)
-      .distinct('hashtag');
+      .collection(SHARED_HASHTAG_COLLECTION)
+      .find({ 'sharedHashtag.userId': userId })
+      .toArray();
 
     console.log(
       `\n[SocialArchive] Got ${results.length} hashtags: ${JSON.stringify(
@@ -169,7 +170,7 @@ export async function getHashtags() {
       )}.\n`,
     );
     return results.map((result) => {
-      return { shareableId: 1130463377, hashtag: result };
+      return { shareableId: result._id, hashtag: result };
     });
   } catch (error) {
     console.log(
@@ -305,11 +306,13 @@ export async function getShareableHashtagDetails(shareableHashtagId) {
     client = await openMongoDBClient();
     // Connect the client to the server	(optional starting in v4.7)
     await client.connect();
-    const query = { _id: 1130463377 };
+    const query = { _id: Number(shareableHashtagId) };
+
     const results = await client
       .db(DB_NAME)
       .collection(SHARED_HASHTAG_COLLECTION)
-      .find(query);
+      .find(query)
+      .toArray();
 
     console.log(
       `\n[SocialArchive] getShareableHashtagDetails for ${shareableHashtagId} Got ${

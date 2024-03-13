@@ -17,8 +17,8 @@ export class AppController {
   }
 
   @Get('facebook/hashtags')
-  getFacebookHashtags(): any {
-    return getHashtags();
+  getFacebookHashtags(@Query() params: any): any {
+    return getHashtags(params.userId);
   }
 
   @Post('save')
