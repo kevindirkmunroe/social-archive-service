@@ -250,18 +250,32 @@ export async function deleteHashtag(userId: string, hashtag: string) {
   }
 }
 
-export async function insertSharedHashtag(sharedHashtag) {
+export async function insertSharedHashtag(upsertTag) {
   let client;
   try {
     client = await openMongoDBClient();
-    await client
+
+    // if sharedHashtag exists do nothing
+    const exists = await client
       .db(DB_NAME)
       .collection(SHARED_HASHTAG_COLLECTION)
-      .replaceOne({ _id: sharedHashtag.id }, sharedHashtag, { upsert: true });
+      .find({'sharedHashtag.hashtag' : upsertTag})
+      .toArray();
 
-    console.log(
-      `[SocialArchive] upsert shared hashtag ${sharedHashtag.id} COMPLETE`,
-    );
+    console.log(`insertSharedHashtag array returned= ${exists}`);
+    if(!exists){
+      await client
+        .db(DB_NAME)
+        .collection(SHARED_HASHTAG_COLLECTION)
+        .replaceOne({ 'sharedHashtag.hashtag'  : upsertTag }, upsertTag, { upsert: true });
+
+      console.log(
+        `[SocialArchive] upsert shared hashtag ${upsertTag.id} COMPLETE`,
+      );
+    }else{
+      console.log(`[SocialArchive] shared hashtag ${upsertTag.id} ALREADY EXISTS`);
+    }
+
   } catch (error) {
     console.log(
       `[SocialArchive] insert shared hashtag ERROR: ${JSON.stringify(error)}`,
