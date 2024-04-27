@@ -5,12 +5,15 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import axios from 'axios';
+import pino from 'pino';
+
 
 const S3_URL = process.env.S3_URL;
 const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY;
 const S3_SECRET_KEY = process.env.S3_SECRET_KEY;
 const S3_REGION = process.env.S3_REGION;
 const S3_MEDIA_BUCKET = process.env.S3_MEDIA_BUCKET;
+const LOGGER = pino(  { timestamp: pino.stdTimeFunctions.isoTime});
 
 const s3Client = new S3Client({
   endpoint: `https://${S3_URL}`,
@@ -41,9 +44,9 @@ export const uploadMediaToS3 = async (mediaName, mediaUrl) => {
         ContentType: 'img/jpeg',
       }),
     );
-    console.log('Response obtained', result);
+    LOGGER.info('Response obtained', result);
   } catch (error) {
-    console.log(`[SocialArchive] Error in S3 upload: ${JSON.stringify(error)}`);
+    LOGGER.error(`[AWSService] Error in S3 upload: ${JSON.stringify(error)}`);
   }
 };
 
@@ -62,17 +65,17 @@ export const deleteMediaFromS3 = async (imagesToDelete) => {
   });
 
   try {
-    console.log(
-      `[SocialArchive] AWSService deleting items: ${JSON.stringify(
+    LOGGER.info(
+      `[AWSService]  deleting items: ${JSON.stringify(
         keyedImages,
       )}`,
     );
     const { Deleted } = await s3Client.send(command);
-    console.log(
-      `[SocialArchive] Successfully deleted ${Deleted.length} objects from S3 bucket. Deleted objects:`,
+    LOGGER.info(
+      `[AWSService] Successfully deleted ${Deleted.length} objects from S3 bucket. Deleted objects:`,
     );
-    console.log(Deleted.map((d) => ` • ${d.Key}`).join('\n'));
+    LOGGER.info(Deleted.map((d) => ` • ${d.Key}`).join('\n'));
   } catch (err) {
-    console.error(`[SocialArchive] AWSService delete error: ${err}`);
+    LOGGER.error(`[AWSService] delete error: ${err}`);
   }
 };

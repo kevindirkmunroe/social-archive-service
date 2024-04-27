@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import pino from 'pino';
+
 import IFacebookPayload from './IFacebookPayload';
 import {
   deleteHashtag,
@@ -11,9 +13,12 @@ import axios from 'axios';
 import { SharedHashtagDto } from './SharedHashtag.dto';
 import IFacebookInsertResult from './IFacebookInsertResult';
 
+const LOGGER = pino(  { timestamp: pino.stdTimeFunctions.isoTime});
+
 @Injectable()
 export class FacebookService {
   static VERSION = 'v18.0';
+
 
   filterPostsByHashtag(data: any[], hashtag: string) {
     let oldestDate = null;
@@ -37,8 +42,8 @@ export class FacebookService {
     try {
       return await deleteHashtag(fbPayload.id, fbPayload.hashtag);
     } catch (error) {
-      console.log(
-        `[SocialArchive] facebookService error deleting hashtag ${fbPayload.hashtag}: ${error}`,
+      LOGGER.info(
+        `[FacebookService] facebookService error deleting hashtag ${fbPayload.hashtag}: ${error}`,
       );
     }
   }
@@ -78,26 +83,26 @@ export class FacebookService {
     let atOldestPost = false;
     let totalCount = 0;
     while (next !== null && !atOldestPost) {
-      console.log(`\nInsertFacebookPosts NEXT URL=${next}`);
+      LOGGER.info(`\nInsertFacebookPosts NEXT URL=${next}`);
       let posts = await getGraphAPIDataFromFacebook(next);
       posts = WTF;
 
       if (posts && posts.data) {
-        console.log(`${posts.data.length} raw posts`);
+        LOGGER.info(`${posts.data.length} raw posts`);
         totalCount += posts.data.length;
         const { filteredPosts, oldestDate } = this.filterPostsByHashtag(
           posts.data,
           fbPayload.hashtag,
         );
-        console.log(`\n\ngot ${filteredPosts.length} filtered posts`);
+        LOGGER.info(`\n\ngot ${filteredPosts.length} filtered posts`);
 
         filteredPosts.forEach((post) => {
           addAttachmentsToPost(post);
         });
 
         result = result.concat(filteredPosts);
-        console.log(`result length now ${result.length}`);
-        console.log(
+        LOGGER.info(`result length now ${result.length}`);
+        LOGGER.info(
           `oldestDate: ${oldestDate.getFullYear()} oldestYear: ${
             fbPayload.oldestYear
           }`,
@@ -112,8 +117,8 @@ export class FacebookService {
     }
 
     await insertPosts(fbPayload.id, fbPayload.hashtag, result);
-    console.log(
-      `[SocialArchive] Archived ${result.length} out of ${totalCount} posts.`,
+    LOGGER.info(
+      `[FacebookService] Archived ${result.length} out of ${totalCount} posts.`,
     );
 
     const sharedHashtag: SharedHashtagDto = {
@@ -133,7 +138,7 @@ export class FacebookService {
     const key =
       Math.floor(Math.random() * (9999999999 - 1000000000 + 1)) + 1000000000;
     await insertSharedHashtag({ id: key, sharedHashtag });
-    console.log(`[SocialArchive] created shared hashtag ${key}`);
+    LOGGER.info(`[FacebookService] created shared hashtag ${key}`);
     return key;
   }
 

@@ -1,5 +1,7 @@
 import 'dotenv/config.js';
 import { MongoClient, ServerApiVersion } from 'mongodb';
+import pino from 'pino';
+
 import { deleteMediaFromS3, uploadMediaToS3 } from './AWSService';
 
 const username = encodeURIComponent(process.env.MONGODB_USERNAME);
@@ -9,6 +11,7 @@ const ROOT_COLLECTION = process.env.MONGODB_ROOT_COLLECTION;
 const SHARED_HASHTAG_COLLECTION = process.env.MONGODB_SHARED_HASHTAG_COLLECTION;
 const MONGO_DB_URI = `mongodb+srv://${username}:${password}@cluster0.pkkfyis.mongodb.net/?retryWrites=true&w=majority`;
 const S3_DEFAULT_IMAGE = process.env.S3_DEFAULT_IMAGE;
+const LOGGER = pino(  { timestamp: pino.stdTimeFunctions.isoTime});
 
 export async function mongoDBInit() {
   const client = new MongoClient(MONGO_DB_URI, {
@@ -25,15 +28,15 @@ export async function mongoDBInit() {
       // Connect the client to the server	(optional starting in v4.7)
       await client.connect();
       await client.db(DB_NAME).createCollection(collection);
-      console.log(`[SocialArchive] MongoDB collection ${collection} ready.`);
+      LOGGER.info(`[MongoDBService] MongoDB collection ${collection} ready.`);
     } catch (error) {
       if (!(error.codeName === 'NamespaceExists')) {
-        console.log(
-          `[SocialArchive] MongoDB init ERROR: ${JSON.stringify(error)}`,
+        LOGGER.error(
+          `[MongoDBService] MongoDB init ERROR: ${JSON.stringify(error)}`,
         );
       } else {
-        console.log(
-          `\n[SocialArchive] MongoDB collection ${collection} ready.`,
+        LOGGER.info(
+          `\n[MongoDBService] MongoDB collection ${collection} ready.`,
         );
       }
     }
@@ -56,7 +59,7 @@ const openMongoDBClient = async () => {
   try {
     await client.connect();
   } catch (error) {
-    console.log(`[MongoDBService] ERROR ${JSON.stringify(error)}`);
+    LOGGER.error(`[MongoDBService] ERROR ${JSON.stringify(error)}`);
   }
   return client;
 };
@@ -76,7 +79,7 @@ export async function insertPosts(
   posts.forEach((post) => {
     mongoDocs.push({ _id: post.id, userId, hashtag, ...post });
     if (post.attachments) {
-      console.log(`image link=${JSON.stringify(post.attachments)}`);
+      LOGGER.info(`[MongoDBService] image link=${JSON.stringify(post.attachments)}`);
     }
   });
   try {
@@ -104,10 +107,10 @@ export async function insertPosts(
       }
       count++;
     }
-    console.log(`\n[SocialArchive] Upserted ${count} posts.\n`);
+    LOGGER.info(`\n[MongoDBService] Upserted ${count} posts.\n`);
   } catch (error) {
-    console.log(
-      `[SocialArchive] MongoDB insert ERROR: ${JSON.stringify(error)}`,
+    LOGGER.error(
+      `[MongoDBService] MongoDB insert ERROR: ${JSON.stringify(error)}`,
     );
   } finally {
     // Ensures that the client will close when you finish/error
@@ -124,17 +127,17 @@ export async function getPosts(userId: string, hashtag: string) {
       userId !== null
         ? { userId: userId, hashtag: hashtag }
         : { hashtag: hashtag };
-    console.log(`[SocialArchive] getPosts query=${JSON.stringify(query)}`);
+    LOGGER.info(`[MongoDBService] getPosts query=${JSON.stringify(query)}`);
     const results = await client
       .db(DB_NAME)
       .collection(ROOT_COLLECTION)
       .find(query)
       .toArray();
 
-    console.log(`\n[SocialArchive] Got ${results.length} posts.\n`);
+    LOGGER.info(`\n[MongoDBService] Got ${results.length} posts.\n`);
     return results;
   } catch (error) {
-    console.log(`[SocialArchive] MongoDB get ERROR: ${JSON.stringify(error)}`);
+    LOGGER.error(`[MongoDBService] MongoDB get ERROR: ${JSON.stringify(error)}`);
   } finally {
     // Ensures that the client will close when you finish/error
     if (client) {
@@ -164,17 +167,15 @@ export async function getHashtags(userId) {
       .find({ 'sharedHashtag.userId': userId })
       .toArray();
 
-    console.log(
-      `\n[SocialArchive] Got ${results.length} hashtags: ${JSON.stringify(
-        results,
-      )}.\n`,
+    LOGGER.info(
+      `\n[MongoDBService] Got ${results.length} hashtags`,
     );
     return results.map((result) => {
       return { shareableId: result._id, hashtag: result };
     });
   } catch (error) {
-    console.log(
-      `[SocialArchive] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
+    LOGGER.error(
+      `[MongoDBService] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
     );
   } finally {
     // Ensures that the client will close when you finish/error
@@ -190,7 +191,7 @@ export async function deleteHashtag(userId: string, hashtag: string) {
   try {
     client = await openMongoDBClient();
   } catch (error) {
-    console.log(
+    LOGGER.error(
       `[MongoDBService] ERROR opening MongoDB client: ${JSON.stringify(error)}`,
     );
     return;
@@ -229,8 +230,8 @@ export async function deleteHashtag(userId: string, hashtag: string) {
 
       try {
         await deleteMediaFromS3(imagesToDelete);
-        console.log(
-          `\n[SocialArchive] Deleted ${imagesToDelete.length} posts.\n`,
+        LOGGER.info(
+          `\n[MongoDBService] Deleted ${imagesToDelete.length} posts.\n`,
         );
       } catch (err) {
         throw err;
@@ -238,8 +239,8 @@ export async function deleteHashtag(userId: string, hashtag: string) {
     });
     return imagesToDelete.length;
   } catch (error) {
-    console.log(
-      `[SocialArchive] Error deleting hashtag ${hashtag}: ${JSON.stringify(
+    LOGGER.error(
+      `[MongoDBService] Error deleting hashtag ${hashtag}: ${JSON.stringify(
         error,
       )}`,
     );
@@ -262,23 +263,23 @@ export async function insertSharedHashtag(upsertTag) {
       .find({'sharedHashtag.hashtag' : upsertTag})
       .toArray();
 
-    console.log(`insertSharedHashtag array returned= ${exists}`);
+    LOGGER.debug(`[MongoDBService] insertSharedHashtag array returned= ${exists}`);
     if(!exists){
       await client
         .db(DB_NAME)
         .collection(SHARED_HASHTAG_COLLECTION)
         .replaceOne({ 'sharedHashtag.hashtag'  : upsertTag }, upsertTag, { upsert: true });
 
-      console.log(
-        `[SocialArchive] upsert shared hashtag ${upsertTag.id} COMPLETE`,
+      LOGGER.info(
+        `[MongoDBService] upsert shared hashtag ${upsertTag.id} COMPLETE`,
       );
     }else{
-      console.log(`[SocialArchive] shared hashtag ${upsertTag.id} ALREADY EXISTS`);
+      LOGGER.info(`[MongoDBService] shared hashtag ${upsertTag.id} ALREADY EXISTS`);
     }
 
   } catch (error) {
-    console.log(
-      `[SocialArchive] insert shared hashtag ERROR: ${JSON.stringify(error)}`,
+      LOGGER.error(
+      `[MongoDBService] insert shared hashtag ERROR: ${JSON.stringify(error)}`,
     );
   } finally {
     if (client) {
@@ -298,15 +299,15 @@ export async function getShareableHashtagId(userId, hashtag) {
       .collection(SHARED_HASHTAG_COLLECTION)
       .find({ userId, hashtag });
 
-    console.log(
-      `\n[SocialArchive] Got ${
+    LOGGER.info(
+      `\n[MongoDBService] Got ${
         results.length
       } shareable hashtags: ${JSON.stringify(results)})}.\n`,
     );
     return results;
   } catch (error) {
-    console.log(
-      `[SocialArchive] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
+    LOGGER.error(
+      `[MongoDBService] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
     );
   } finally {
     // Ensures that the client will close when you finish/error
@@ -328,15 +329,15 @@ export async function getShareableHashtagDetails(shareableHashtagId) {
       .find(query)
       .toArray();
 
-    console.log(
-      `\n[SocialArchive] getShareableHashtagDetails for ${shareableHashtagId} Got ${
+    LOGGER.info(
+      `\n[MongoDBService] getShareableHashtagDetails for ${shareableHashtagId} Got ${
         results.length
       } shareable hashtags: ${JSON.stringify(results)})}.\n`,
     );
     return results;
   } catch (error) {
-    console.log(
-      `[SocialArchive] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
+    LOGGER.error(
+      `[MongoDBService] MongoDB get hashtags ERROR: ${JSON.stringify(error)}`,
     );
   } finally {
     // Ensures that the client will close when you finish/error
