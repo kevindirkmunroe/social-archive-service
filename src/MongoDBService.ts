@@ -3,6 +3,7 @@ import { MongoClient, ServerApiVersion } from 'mongodb';
 import pino from 'pino';
 
 import { deleteMediaFromS3, uploadMediaToS3 } from './AWSService';
+import { SharedHashtagDto } from './SharedHashtag.dto';
 
 const username = encodeURIComponent(process.env.MONGODB_USERNAME);
 const password = encodeURIComponent(process.env.MONGODB_PASSWORD);
@@ -36,7 +37,7 @@ export async function mongoDBInit() {
         );
       } else {
         LOGGER.info(
-          `\n[MongoDBService] MongoDB collection ${collection} ready.`,
+          `[MongoDBService] MongoDB collection ${collection} ready.`,
         );
       }
     }
@@ -107,7 +108,7 @@ export async function insertPosts(
       }
       count++;
     }
-    LOGGER.info(`\n[MongoDBService] Upserted ${count} posts.\n`);
+    LOGGER.info(`[MongoDBService] Upserted ${count} posts.\n`);
   } catch (error) {
     LOGGER.error(
       `[MongoDBService] MongoDB insert ERROR: ${JSON.stringify(error)}`,
@@ -134,7 +135,7 @@ export async function getPosts(userId: string, hashtag: string) {
       .find(query)
       .toArray();
 
-    LOGGER.info(`\n[MongoDBService] Got ${results.length} posts.\n`);
+    LOGGER.info(`[MongoDBService] Got ${results.length} posts.\n`);
     return results;
   } catch (error) {
     LOGGER.error(`[MongoDBService] MongoDB get ERROR: ${JSON.stringify(error)}`);
@@ -168,7 +169,7 @@ export async function getHashtags(userId) {
       .toArray();
 
     LOGGER.info(
-      `\n[MongoDBService] Got ${results.length} hashtags`,
+      `[MongoDBService] Got ${results.length} hashtags`,
     );
     return results.map((result) => {
       return { shareableId: result._id, hashtag: result };
@@ -183,7 +184,7 @@ export async function getHashtags(userId) {
   }
 }
 
-export async function deleteHashtag(userId: string, hashtag: string) {
+export async function deleteHashtag(userId: string, hashtag: any) {
   //
   // Initialize Mongo Client
   //
@@ -197,47 +198,60 @@ export async function deleteHashtag(userId: string, hashtag: string) {
     return;
   }
 
-  const session = client.startSession();
-  const imagesToDelete = [];
-
   try {
-    await session.withTransaction(async () => {
-      //
-      // Delete from MongoDB
-      //
-      try {
-        await client
-          .db(DB_NAME)
-          .collection(ROOT_COLLECTION)
-          .deleteMany({ hashtag: hashtag }, { session: session });
-      } catch (err) {
-        throw err;
-      }
+    //
+    // Delete hashtag
+    //
 
-      //
-      // Delete from S3
-      //
+    // request comes from sharedhashtag dataset, hence the deconstructon here.
+    const hashtagString = hashtag.sharedHashtag.hashtag;
 
-      // TODO: find a way to get the image ids without fetching posts first
-      try {
-        const posts = await getPosts(userId, hashtag);
-        posts.forEach((post) => {
-          imagesToDelete.push(`${post.id}.jpg`);
-        });
-      } catch (err) {
-        throw err;
-      }
+    LOGGER.info(`[MongoDBService] deleting hashtag ${JSON.stringify(hashtagString)}`);
+    try {
+      await client
+        .db(DB_NAME)
+        .collection(ROOT_COLLECTION)
+        .deleteMany({ 'hashtag': hashtagString });
+    } catch (err) {
+      LOGGER.error(`[MongoDBService] ERROR on delete: ${err}`);
+      throw err;
+    }
 
-      try {
-        await deleteMediaFromS3(imagesToDelete);
-        LOGGER.info(
-          `\n[MongoDBService] Deleted ${imagesToDelete.length} posts.\n`,
-        );
-      } catch (err) {
-        throw err;
-      }
-    });
-    return imagesToDelete.length;
+    //
+    // Delete sharedHashtag
+    //
+    try {
+      await client
+        .db(DB_NAME)
+        .collection(SHARED_HASHTAG_COLLECTION)
+        .deleteMany({ 'sharedHashtag.hashtag': hashtagString });
+    } catch (err) {
+      throw err;
+    }
+
+    //
+    // Delete from S3
+    //
+    // TODO: find a way to get the image ids without fetching posts first
+    // const imagesToDelete = [];
+    // try {
+    //   const posts = await getPosts(userId, hashtag);
+    //   posts.forEach((post) => {
+    //     imagesToDelete.push(`${post.id}.jpg`);
+    //   });
+    // } catch (err) {
+    //   throw err;
+    // }
+    //
+    // try {
+    //   await deleteMediaFromS3(imagesToDelete);
+    //   LOGGER.info(
+    //     `[MongoDBService] Deleted ${imagesToDelete.length} posts.\n`,
+    //   );
+    // } catch (err) {
+    //   throw err;
+    // }
+    // return imagesToDelete.length;
   } catch (error) {
     LOGGER.error(
       `[MongoDBService] Error deleting hashtag ${hashtag}: ${JSON.stringify(
@@ -245,37 +259,28 @@ export async function deleteHashtag(userId: string, hashtag: string) {
       )}`,
     );
   } finally {
-    await session.endSession();
     // Ensures that the client will close when you finish/error
     await client.close();
   }
 }
 
-export async function insertSharedHashtag(upsertTag) {
+export async function insertSharedHashtag(key: number, sharedHashtagObj : SharedHashtagDto) {
+
+  const upsertSharedHashtag = {_id: key, id: key, sharedHashtag: sharedHashtagObj}
+  LOGGER.info(`[MongoDBService] insertSharedHashtag parameter=${JSON.stringify(sharedHashtagObj)}`);
+
   let client;
   try {
     client = await openMongoDBClient();
 
-    // if sharedHashtag exists do nothing
-    const exists = await client
+    await client
       .db(DB_NAME)
       .collection(SHARED_HASHTAG_COLLECTION)
-      .find({'sharedHashtag.hashtag' : upsertTag})
-      .toArray();
+      .replaceOne({ 'sharedHashtag.hashtag'  : sharedHashtagObj.hashtag }, upsertSharedHashtag, { upsert: true });
 
-    LOGGER.debug(`[MongoDBService] insertSharedHashtag array returned= ${exists}`);
-    if(!exists){
-      await client
-        .db(DB_NAME)
-        .collection(SHARED_HASHTAG_COLLECTION)
-        .replaceOne({ 'sharedHashtag.hashtag'  : upsertTag }, upsertTag, { upsert: true });
-
-      LOGGER.info(
-        `[MongoDBService] upsert shared hashtag ${upsertTag.id} COMPLETE`,
-      );
-    }else{
-      LOGGER.info(`[MongoDBService] shared hashtag ${upsertTag.id} ALREADY EXISTS`);
-    }
+    LOGGER.info(
+      `[MongoDBService] upsert shared hashtag ${JSON.stringify(upsertSharedHashtag)} COMPLETE`,
+    );
 
   } catch (error) {
       LOGGER.error(
@@ -300,7 +305,7 @@ export async function getShareableHashtagId(userId, hashtag) {
       .find({ userId, hashtag });
 
     LOGGER.info(
-      `\n[MongoDBService] Got ${
+      `[MongoDBService] Got ${
         results.length
       } shareable hashtags: ${JSON.stringify(results)})}.\n`,
     );
@@ -330,7 +335,7 @@ export async function getShareableHashtagDetails(shareableHashtagId) {
       .toArray();
 
     LOGGER.info(
-      `\n[MongoDBService] getShareableHashtagDetails for ${shareableHashtagId} Got ${
+      `[MongoDBService] getShareableHashtagDetails for ${shareableHashtagId} Got ${
         results.length
       } shareable hashtags: ${JSON.stringify(results)})}.\n`,
     );

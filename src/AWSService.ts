@@ -6,6 +6,7 @@ import {
 } from '@aws-sdk/client-s3';
 import axios from 'axios';
 import pino from 'pino';
+import { getPosts } from './MongoDBService';
 
 
 const S3_URL = process.env.S3_URL;
@@ -50,7 +51,18 @@ export const uploadMediaToS3 = async (mediaName, mediaUrl) => {
   }
 };
 
-export const deleteMediaFromS3 = async (imagesToDelete) => {
+export const deleteMediaFromS3 = async (userId, hashtag) => {
+
+  const imagesToDelete = [];
+  try {
+    const posts = await getPosts(userId, hashtag);
+    posts.forEach((post) => {
+      imagesToDelete.push(`${post.id}.jpg`);
+    });
+  } catch (err) {
+    throw err;
+  }
+
   const keyedImages = imagesToDelete.map((image) => {
     return {
       Key: image,
@@ -66,15 +78,14 @@ export const deleteMediaFromS3 = async (imagesToDelete) => {
 
   try {
     LOGGER.info(
-      `[AWSService]  deleting items: ${JSON.stringify(
-        keyedImages,
-      )}`,
+      `[AWSService]  deleting ${imagesToDelete.length} images)}`,
     );
     const { Deleted } = await s3Client.send(command);
     LOGGER.info(
       `[AWSService] Successfully deleted ${Deleted.length} objects from S3 bucket. Deleted objects:`,
     );
     LOGGER.info(Deleted.map((d) => ` • ${d.Key}`).join('\n'));
+    return imagesToDelete.length;
   } catch (err) {
     LOGGER.error(`[AWSService] delete error: ${err}`);
   }

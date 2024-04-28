@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import pino from 'pino';
+import axios from 'axios';
 
 import IFacebookPayload from './IFacebookPayload';
 import {
@@ -9,7 +10,10 @@ import {
   getShareableHashtagId,
   getShareableHashtagDetails,
 } from './MongoDBService';
-import axios from 'axios';
+import {
+  deleteMediaFromS3
+} from './AWSService';
+
 import { SharedHashtagDto } from './SharedHashtag.dto';
 import IFacebookInsertResult from './IFacebookInsertResult';
 
@@ -40,7 +44,8 @@ export class FacebookService {
 
   async deleteFacebookPosts(fbPayload: IFacebookPayload): Promise<number> {
     try {
-      return await deleteHashtag(fbPayload.id, fbPayload.hashtag);
+      const count = await deleteHashtag(fbPayload.id, fbPayload.hashtag);
+      return await deleteMediaFromS3(fbPayload.id, fbPayload.hashtag);
     } catch (error) {
       LOGGER.info(
         `[FacebookService] facebookService error deleting hashtag ${fbPayload.hashtag}: ${error}`,
@@ -137,7 +142,7 @@ export class FacebookService {
   async createSharedHashtag(sharedHashtag: SharedHashtagDto) {
     const key =
       Math.floor(Math.random() * (9999999999 - 1000000000 + 1)) + 1000000000;
-    await insertSharedHashtag({ id: key, sharedHashtag });
+    await insertSharedHashtag(key, sharedHashtag);
     LOGGER.info(`[FacebookService] created shared hashtag ${key}`);
     return key;
   }
