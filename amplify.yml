@@ -1,0 +1,24 @@
+version: 1
+appRoot: src
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - ls
+        - pwd
+        - npm ci
+        - ls
+    build:
+      commands:
+        - npm run build
+    postBuild:
+      commands:
+        - ls
+        - pwd
+  artifacts:
+    baseDirectory: dist 
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - node_modules/**/*
